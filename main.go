@@ -17,13 +17,14 @@ var db *gorm.DB
 var err error
 
 type Product struct {
-	Id    int             `json:"id"`
-	Code  string          `json:"code"`
-	Name  string          `json:"name"`
-	Price decimal.Decimal `json:"price" sql:"type:decimal(16,2)"`
+	Id          int             `json:"id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Price       decimal.Decimal `json:"price" sql:"type:decimal(16,2)"`
+	Amount      int             `json:"amount"`
 }
 
-//Result berbentuk array product
+//Result adalah sebuah array produk
 type Result struct {
 	Code    int         `json:"code"`
 	Data    interface{} `json:"data"`
@@ -31,8 +32,10 @@ type Result struct {
 }
 
 func main() {
-	db, err = gorm.Open("mysql", "root:@tcp(127.0.0.1:3306)/go_rest_api_crud?charset=utf8&parseTime=True")
+	// Open Connection
+	db, err = gorm.Open("mysql", "root:@tcp(127.0.0.1:3306)/fazztrack?charset=utf8&parseTime=True")
 
+	// Error Handling Connection
 	if err != nil {
 		log.Fatal("Connection failed to open")
 	} else {
@@ -40,7 +43,6 @@ func main() {
 	}
 
 	db.AutoMigrate(&Product{})
-
 	handleRequests()
 }
 
@@ -49,25 +51,44 @@ func handleRequests() {
 
 	router := mux.NewRouter().StrictSlash(true)
 
-	router.HandleFunc("/", homeHandler)
-	router.HandleFunc("/api/products", createProductHandler).Methods("POST")
-	router.HandleFunc("/api/products", indexProductHandler).Methods("GET")
-	router.HandleFunc("/api/products/{id}", showProductHandler).Methods("GET")
-	router.HandleFunc("/api/products/{id}", updateProductHandler).Methods("PUT")
-	router.HandleFunc("/api/products/{id}", deleteProductHandler).Methods("DELETE")
+	// Handler Not Found
+	router.NotFoundHandler = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusNotFound)
+
+		res := Result{Code: 404, Message: "Method not found"}
+		response, _ := json.Marshal(res)
+		rw.Write(response)
+	})
+
+	// Method Not Allowed
+	router.MethodNotAllowedHandler = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusMethodNotAllowed)
+
+		res := Result{Code: 403, Message: "Method not allowed"}
+		response, _ := json.Marshal(res)
+		rw.Write(response)
+	})
+
+	router.HandleFunc("/", homePage)
+	router.HandleFunc("/api/products", createHandler).Methods("POST")
+	router.HandleFunc("/api/products", indexHandler).Methods("GET")
+	router.HandleFunc("/api/products/{id:[0-9]+}", showHandler).Methods("GET")
+	router.HandleFunc("/api/products/{id:[0-9]+}", updateHandler).Methods("PUT")
+	router.HandleFunc("/api/products/{id:[0-9]+}", deleteHandler).Methods("DELETE")
 
 	http.ListenAndServe(":9999", router)
 }
 
-func homeHandler(rw http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(rw, "Welcome to our homepage")
+func homePage(rw http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(rw, "Welcome to the homepage")
 }
 
-func createProductHandler(rw http.ResponseWriter, r *http.Request) {
+func createHandler(rw http.ResponseWriter, r *http.Request) {
 	payload, _ := ioutil.ReadAll(r.Body)
 
 	var product Product
-
 	json.Unmarshal(payload, &product)
 
 	db.Create(&product)
@@ -84,9 +105,8 @@ func createProductHandler(rw http.ResponseWriter, r *http.Request) {
 	rw.Write(result)
 }
 
-func indexProductHandler(rw http.ResponseWriter, r *http.Request) {
+func indexHandler(rw http.ResponseWriter, r *http.Request) {
 	products := []Product{}
-
 	db.Find(&products)
 
 	res := Result{Code: 200, Data: products, Message: "Products indexed successfully"}
@@ -101,7 +121,7 @@ func indexProductHandler(rw http.ResponseWriter, r *http.Request) {
 	rw.Write(result)
 }
 
-func showProductHandler(rw http.ResponseWriter, r *http.Request) {
+func showHandler(rw http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	productID := vars["id"]
 
@@ -121,7 +141,7 @@ func showProductHandler(rw http.ResponseWriter, r *http.Request) {
 	rw.Write(result)
 }
 
-func updateProductHandler(rw http.ResponseWriter, r *http.Request) {
+func updateHandler(rw http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	productID := vars["id"]
 
@@ -146,7 +166,7 @@ func updateProductHandler(rw http.ResponseWriter, r *http.Request) {
 	rw.Write(result)
 }
 
-func deleteProductHandler(rw http.ResponseWriter, r *http.Request) {
+func deleteHandler(rw http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	productID := vars["id"]
 
